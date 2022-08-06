@@ -10,6 +10,13 @@ FileContent = namedtuple("FileContent", "filename content starting_sector")
 class InputError(Exception):
     pass
 
+
+def program_version():
+	return "1.1"
+
+def comment_character():
+	return "#"
+
 def get_config(modus):
 	base_config = {
 		"directory_entry_size": 16,
@@ -68,6 +75,9 @@ def get_file_contents(input_file_list):
 	
 	with open(input_file_list, "r") as file:
 		files = file.readlines()
+		# support comments
+		files = [filename.split(comment_character())[0] for filename in files]
+		# support extraneous whitespace
 		files = [filename.rstrip() for filename in files if filename.rstrip() != ""]
 
 	if len(files) == 0:
@@ -232,6 +242,8 @@ def write_directory(modus, contents, outputfile):
 
 
 def main():
+	print(f"This is version {program_version()}\n")
+
 	if len(sys.argv) != 2:
 		print(f"Usage: python3 {sys.argv[0]} [input_file_list]")
 		sys.exit()

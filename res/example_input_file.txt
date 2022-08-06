@@ -1,4 +1,7 @@
 M049_example_output_file.ROM
 
-ABC.COM
+ABC.COM              # this is an example comment
 ALP123ET.DI
+
+  # empty lines inbetween are also no problem
+PETER.LA
