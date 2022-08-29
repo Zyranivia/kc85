@@ -12,7 +12,7 @@ class InputError(Exception):
 
 
 def program_version():
-	return "1.1"
+	return "1.2"
 
 def comment_character():
 	return "#"
@@ -113,15 +113,15 @@ def get_file_contents(input_file_list):
 	
 	return outputfile, modus, contents
 
-
 # ensure if there is space for the directory, we provide it
 def move_smallest_file_to_back(modus, contents):
 	config = get_config(modus)
 	padding_size = config["padding_size"]
 
-	val, idc = min((len(content[1]) % padding_size, idx) for (idx, content) in enumerate(contents))
+	# minus one as exactly padding_size is the worst case; avoid underflow
+	val, idc = min((max(0, len(content[1]) - 1) % padding_size, idx) for (idx, content) in enumerate(contents))
 	contents[-1], contents[idc] = contents[idc], contents[-1]
-
+	return idc
 
 def write_files_with_padding(modus, contents, outputfile):
 	config = get_config(modus)
@@ -222,17 +222,20 @@ def create_directory_entry(modus, file_content):
 	return result
 
 
-def write_directory(modus, contents, outputfile):
+def write_directory(modus, contents, outputfile, swapped_with_back_id):
 	config = get_config(modus)
-	entry_size = config["directory_entry_size"]
 	space_need_for_directory = config["max_number_of_files"] * config["directory_entry_size"]
 
 	free_space_in_padding_size = pad_file_until_directory(modus, contents, outputfile)
 	assert(outputfile.stat().st_size == (config["final_file_size"] - space_need_for_directory))
 
 	with open(outputfile, "ab") as file:
-		for file_content in contents:
-			file.write(create_directory_entry(modus, file_content))
+		entries = [create_directory_entry(modus, file_content) for file_content in contents]
+		# swap smallest entry back in directory so they appear in order
+		entries[-1], entries[swapped_with_back_id] = entries[swapped_with_back_id], entries[-1]
+
+		for entry in entries:
+			file.write(entry)
 
 		empty_directory_entries = config["max_number_of_files"] - len(contents)
 		file.write(b'\xe5' * empty_directory_entries * 16)
@@ -252,9 +255,9 @@ def main():
 		outputfile, modus, contents = get_file_contents(Path(sys.argv[1]))
 		config = get_config(modus)
 
-		move_smallest_file_to_back(modus, contents)
+		swapped_with_back_id = move_smallest_file_to_back(modus, contents)
 		contents = write_files_with_padding(modus, contents, outputfile)
-		free_space_in_padding_size = write_directory(modus, contents, outputfile)
+		free_space_in_padding_size = write_directory(modus, contents, outputfile, swapped_with_back_id)
 
 		initial_space_in_padding_size = config["final_file_size"] // config["padding_size"]
 
