@@ -19,10 +19,13 @@ class InputError(Exception):
 		)
 
 def program_version():
-	return "1.3"
+	return "1.3.1"
 
 def comment_character():
 	return "#"
+
+def dummy_file_name():
+	return "DUMMY.ROM"
 
 def get_config(modus):
 	base_config = {
@@ -69,6 +72,12 @@ def get_modus_and_updated_outputfile(outputfile):
 
 def resolve_name(filepath):
 	resolved_name = filepath.name
+	if (resolved_name == dummy_file_name()):
+		raise InputError(
+			f"{dummy_file_name()} is a reserved name and cannot be used",
+			f"{dummy_file_name()} ist ein reservierter Name und darf nicht verwendet werden",
+		)
+
 	stem, extension = os.path.splitext(resolved_name)
 
 	if (len(stem) > 8):
@@ -230,7 +239,7 @@ def pad_file_until_directory_with_dummy_rom(modus, contents, outputfile):
 			# add dummy file to fill out remaining space
 			dummy_content = b'\xe5' * (final_size - file_size_after_contents)
 			contents.append(FileContent(
-				"DUMMY.ROM",
+				dummy_file_name(),
 				dummy_content,
 				get_current_starting_sector(modus, file)
 			))
@@ -258,9 +267,10 @@ def create_directory_entry(modus, file_content):
 	stem, extension = os.path.splitext(file_content.filename)
 	assert(extension[0] == ".")
 	extension = extension[1:]
+	is_dummy_entry = file_content.filename == dummy_file_name()
 
 	# byte 0: empty
-	result = bytearray(b'\x01') # \x01 or \x0f
+	result = bytearray(b'\x01') if (is_dummy_entry) else bytearray(b'\x00')
 	# byte 1-8: stem
 	result += stem.encode("ascii")
 	result += (b'\x20' * (config["max_stem_size"] - len(stem)))
@@ -289,6 +299,7 @@ def create_directory_entry(modus, file_content):
 def write_directory(modus, contents, outputfile, swapped_with_back_id):
 	config = get_config(modus)
 	space_need_for_directory = config["max_number_of_files"] * config["directory_entry_size"]
+	original_back_id = len(contents) - 1 # entries[-1] will usually be the dummy file
 
 	free_space_in_padding_size = pad_file_until_directory_with_dummy_rom(modus, contents, outputfile)
 	assert(outputfile.stat().st_size == (config["final_file_size"] - space_need_for_directory))
@@ -296,7 +307,7 @@ def write_directory(modus, contents, outputfile, swapped_with_back_id):
 	with open(outputfile, "ab") as file:
 		entries = [create_directory_entry(modus, file_content) for file_content in contents]
 		# swap smallest entry back in directory so they appear in order
-		entries[-1], entries[swapped_with_back_id] = entries[swapped_with_back_id], entries[-1]
+		entries[original_back_id], entries[swapped_with_back_id] = entries[swapped_with_back_id], entries[original_back_id]
 
 		for entry in entries:
 			file.write(entry)
