@@ -14,12 +14,11 @@ FileContent = namedtuple("FileContent", "filename content starting_sector")
 class InputError(Exception):
 	def __init__(self, english, german = ""):
 		super().__init__(
-			f"{Fore.RED}An error has been encountered | Ein Fehler ist aufgetreten{Style.RESET_ALL}\n\n" +
-			english + "\n\n" + german
+			f"{Fore.RED}Ein Fehler ist aufgetreten{Style.RESET_ALL}\n\n" + german
 		)
 
 def program_version():
-	return "1.3.1"
+	return "1.3.2"
 
 def comment_character():
 	return "#"
@@ -88,7 +87,7 @@ def resolve_name(filepath):
 	if (len(extension) > 4):
 		raise InputError(
 			f"extension '{extension[1:]}' of '{resolved_name}' is longer than 3 characters",
-			f"Extension '{extension[1:]}' bon '{resolved_name}' ist länger als 3 Zeichen"
+			f"Extension '{extension[1:]}' von '{resolved_name}' ist länger als 3 Zeichen"
 		)
 
 	try:
@@ -181,8 +180,13 @@ def write_files_with_padding(modus, contents, outputfile):
 	outputfile.unlink(missing_ok=True)
 
 	new_contents = [] # with updated starting_sector
+	debug_sum = 0
+
 	with open(outputfile, "ab") as file:
 		for file_content in contents:
+
+			debug_size_before = outputfile.stat().st_size
+
 			new_contents.append(FileContent(
 				file_content.filename,
 				file_content.content,
@@ -190,7 +194,23 @@ def write_files_with_padding(modus, contents, outputfile):
 			))
 
 			file.write(file_content.content)
-			file.write(b'\0' * (padding_size - len(file_content.content) % padding_size))
+			used_space_into_last_padding = len(file_content.content) % padding_size
+			# if perfect fit, do not pad
+			if (used_space_into_last_padding > 0):
+				file.write(b'\0' * (padding_size - used_space_into_last_padding))
+
+			# from here on temporary for debugging
+			file.flush()
+			debug_size_after = outputfile.stat().st_size
+
+			debug_filename = file_content.filename.ljust(18)
+			debug_size_file = str(round(len(file_content.content) / 1024, 3)).ljust(9)
+			debug_size_padded = math.ceil((debug_size_after - debug_size_before) / 1024)
+
+			print(f"{debug_filename} # {debug_size_file}{debug_size_padded}")
+			debug_sum += debug_size_padded
+
+	print(f"\nSumme: {debug_sum}\n")
 
 	file_size = outputfile.stat().st_size
 	if file_size > final_file_size:
@@ -213,10 +233,6 @@ def pad_file_until_directory_with_dummy_rom(modus, contents, outputfile):
 	file_size_after_contents = outputfile.stat().st_size
 
 	free_space_in_padding_size = (final_size // padding_size) - (file_size_after_contents // padding_size)
-	if (free_space_in_padding_size > 0):
-		# defensive estimation that the directory is in its own block
-		assert(space_need_for_directory <= config["padding_size"])
-		free_space_in_padding_size = free_space_in_padding_size - 1
 	assert(free_space_in_padding_size >= 0)
 
 	if file_size_after_contents == final_size:
@@ -232,7 +248,7 @@ def pad_file_until_directory_with_dummy_rom(modus, contents, outputfile):
 		if (len(contents) == max_number_of_files):
 			raise InputError(
 				f"Maximum number of entries ({max_number_of_files}) was used, but there is still unused space. Please remove at least on entry.",
-				f"Die Maximalanzahl an Einträge ({max_number_of_files}) wurde genutzt, es gibt jedoch noch ungenutzten Platz. Bitte entferne wenigstens einen Eintrag."
+				f"Die Maximalanzahl an Einträgen ({max_number_of_files}) wurde genutzt, es gibt jedoch noch ungenutzten Platz. Bitte entferne wenigstens einen Eintrag."
 			)
 
 		with open(outputfile, "ab") as file:
@@ -270,7 +286,7 @@ def create_directory_entry(modus, file_content):
 	is_dummy_entry = file_content.filename == dummy_file_name()
 
 	# byte 0: empty
-	result = bytearray(b'\x01') if (is_dummy_entry) else bytearray(b'\x00')
+	result = bytearray(b'\x0f') if (is_dummy_entry) else bytearray(b'\x00')
 	# byte 1-8: stem
 	result += stem.encode("ascii")
 	result += (b'\x20' * (config["max_stem_size"] - len(stem)))
@@ -289,7 +305,11 @@ def create_directory_entry(modus, file_content):
 
 	# file attributes are defined by the highest order bit of the stem and extension
 	assert(all([get_bit(byte, 7) == 0 for byte in result[1:12]]))
-	for byte_to_set in [2, 8, 9]:
+	bytes_to_set = [2, 8, 9]
+	if is_dummy_entry:
+		bytes_to_set.append(10)
+
+	for byte_to_set in bytes_to_set:
 		result[byte_to_set] = set_bit(result[byte_to_set], 7)
 
 	assert(len(result) == get_config(modus)["directory_entry_size"])
@@ -337,14 +357,15 @@ def main():
 		initial_space_in_padding_size = config["final_file_size"] // config["padding_size"]
 
 		contains_dummy_file = (free_space_in_padding_size != 0)
-		msg = f"'{str(outputfile)}' has successfully been created, containing {len(contents)} programs"
-		if (contains_dummy_file):
-			msg += (f" (including one dummy file)")
-		msg += "."
-		msg += f"\nThere are {free_space_in_padding_size}/{initial_space_in_padding_size} blocks of {config['padding_size']} bytes still unused."
-		msg += f" (= {free_space_in_padding_size * config['padding_size'] // 1024} kiByte)"
+		msg = ""
 
-		msg += "\n\n"
+		# msg = f"'{str(outputfile)}' has successfully been created, containing {len(contents)} programs"
+		# if (contains_dummy_file):
+		# 	msg += (f" (including one dummy file)")
+		# msg += "."
+		# msg += f"\nThere are {free_space_in_padding_size}/{initial_space_in_padding_size} blocks of {config['padding_size']} bytes still unused."
+		# msg += f" (= {free_space_in_padding_size * config['padding_size'] // 1024} kiByte)"
+		# msg += "\n\n"
 
 		msg += f"'{str(outputfile)}' wurde erfolgreich erzeugt und enthält {len(contents)} Programme"
 		if (contains_dummy_file):
@@ -352,6 +373,7 @@ def main():
 		msg += "."
 		msg += f"\nEs gibt noch {free_space_in_padding_size}/{initial_space_in_padding_size} ungenutzte Blöcke zu je {config['padding_size']} bytes."
 		msg += f" (= {free_space_in_padding_size * config['padding_size'] // 1024} kiByte)"
+		msg += "\n"
 		print(msg)
 		sys.exit(0)
 
