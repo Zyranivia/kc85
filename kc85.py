@@ -13,12 +13,13 @@ FileContent = namedtuple("FileContent", "filename content starting_sector")
 
 class InputError(Exception):
 	def __init__(self, english, german = ""):
+		error = german if (german != "") else english
 		super().__init__(
-			f"{Fore.RED}Ein Fehler ist aufgetreten{Style.RESET_ALL}\n\n" + german
+			f"{Fore.RED}Ein Fehler ist aufgetreten{Style.RESET_ALL}\n\n" + error
 		)
 
 def program_version():
-	return "1.3.2"
+	return "1.4"
 
 def comment_character():
 	return "#"
@@ -172,6 +173,33 @@ def get_current_starting_sector(modus, filehook):
 	filehook.seek(0, os.SEEK_END)
 	return filehook.tell() // config["sector_size"]
 
+# everything in kiB
+def print_memory_layout(modus, contents):
+	config = get_config(modus)
+	padding_size = config["padding_size"]
+	sector_size = config["sector_size"]
+	assert(1024 % sector_size == 0)
+	assert(padding_size % 1024 == 0)
+
+	print(f"Dateiname         | Größe kiByte | Größe im Memorylayout")
+	print(f"––––––––––––––––––––––––––––––––––––––––––––––––––––––––")
+
+	used_memory = 0
+	for filename, content, starting_sector in contents:
+		used_sectors = used_memory * 1024 // sector_size
+		assert(starting_sector == used_sectors)
+
+		formatted_name = filename.ljust(18)
+		formatted_actual_file_size = str(round(len(content) / 1024, 3)).ljust(13)
+		# we calculate here, but the assert above ensures consistency
+		formatted_memory_file_size = math.ceil(len(content) / padding_size) * (padding_size // 1024)
+		used_memory += formatted_memory_file_size
+
+		print(f"{formatted_name}| {formatted_actual_file_size}| {formatted_memory_file_size}")
+
+	print(f"\nSumme: {used_memory} kiByte\n")
+
+
 def write_files_with_padding(modus, contents, outputfile):
 	config = get_config(modus)
 	padding_size = config["padding_size"]
@@ -180,13 +208,10 @@ def write_files_with_padding(modus, contents, outputfile):
 	outputfile.unlink(missing_ok=True)
 
 	new_contents = [] # with updated starting_sector
-	debug_sum = 0
 
 	with open(outputfile, "ab") as file:
 		for file_content in contents:
-
-			debug_size_before = outputfile.stat().st_size
-
+			file.flush()
 			new_contents.append(FileContent(
 				file_content.filename,
 				file_content.content,
@@ -199,18 +224,7 @@ def write_files_with_padding(modus, contents, outputfile):
 			if (used_space_into_last_padding > 0):
 				file.write(b'\0' * (padding_size - used_space_into_last_padding))
 
-			# from here on temporary for debugging
-			file.flush()
-			debug_size_after = outputfile.stat().st_size
-
-			debug_filename = file_content.filename.ljust(18)
-			debug_size_file = str(round(len(file_content.content) / 1024, 3)).ljust(9)
-			debug_size_padded = math.ceil((debug_size_after - debug_size_before) / 1024)
-
-			print(f"{debug_filename} # {debug_size_file}{debug_size_padded}")
-			debug_sum += debug_size_padded
-
-	print(f"\nSumme: {debug_sum}\n")
+	print_memory_layout(modus, new_contents)
 
 	file_size = outputfile.stat().st_size
 	if file_size > final_file_size:
@@ -305,9 +319,7 @@ def create_directory_entry(modus, file_content):
 
 	# file attributes are defined by the highest order bit of the stem and extension
 	assert(all([get_bit(byte, 7) == 0 for byte in result[1:12]]))
-	bytes_to_set = [2, 8, 9]
-	if is_dummy_entry:
-		bytes_to_set.append(10)
+	bytes_to_set = [8, 9, 10] if (is_dummy_entry) else [2, 9, 10]
 
 	for byte_to_set in bytes_to_set:
 		result[byte_to_set] = set_bit(result[byte_to_set], 7)
