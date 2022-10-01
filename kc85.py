@@ -19,7 +19,7 @@ class InputError(Exception):
 		)
 
 def program_version():
-	return "1.4"
+	return "1.5"
 
 def comment_character():
 	return "#"
@@ -158,13 +158,17 @@ def get_file_contents(input_file_list):
 	
 	return outputfile, modus, contents
 
+def free_space_to_pad(modus, file_content):
+	padding_size = get_config(modus)["padding_size"]
+	used_space_into_last_padding = len(file_content.content) % padding_size
+	if (used_space_into_last_padding == 0):
+		used_space_into_last_padding = padding_size
+
+	return padding_size - used_space_into_last_padding
+
 # ensure if there is space for the directory, we provide it
 def move_smallest_file_to_back(modus, contents):
-	config = get_config(modus)
-	padding_size = config["padding_size"]
-
-	# minus one as exactly padding_size is the worst case; avoid underflow
-	val, idc = min((max(0, len(content[1]) - 1) % padding_size, idx) for (idx, content) in enumerate(contents))
+	val, idc = max((free_space_to_pad(modus, content), idx) for (idx, content) in enumerate(contents))
 	contents[-1], contents[idc] = contents[idc], contents[-1]
 	return idc
 
@@ -202,7 +206,6 @@ def print_memory_layout(modus, contents):
 
 def write_files_with_padding(modus, contents, outputfile):
 	config = get_config(modus)
-	padding_size = config["padding_size"]
 	final_file_size = config["final_file_size"]
 
 	outputfile.unlink(missing_ok=True)
@@ -219,10 +222,7 @@ def write_files_with_padding(modus, contents, outputfile):
 			))
 
 			file.write(file_content.content)
-			used_space_into_last_padding = len(file_content.content) % padding_size
-			# if perfect fit, do not pad
-			if (used_space_into_last_padding > 0):
-				file.write(b'\0' * (padding_size - used_space_into_last_padding))
+			file.write(b'\0' * free_space_to_pad(modus, file_content))
 
 	print_memory_layout(modus, new_contents)
 
@@ -251,8 +251,7 @@ def pad_file_until_directory_with_dummy_rom(modus, contents, outputfile):
 
 	if file_size_after_contents == final_size:
 		# can we still fit the directory?
-		space_left = padding_size - (len(contents[-1].content) % padding_size)
-		if space_left < space_need_for_directory:
+		if free_space_to_pad(modus, contents[-1]) < space_need_for_directory:
 			raise InputError(
 				f"cannot fit directory :/",
 				f"Kein Platz mehr für das Verzeichnis :/"
