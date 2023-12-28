@@ -18,7 +18,7 @@ class InputError(Exception):
 		)
 
 def program_version():
-	return "1.0"
+	return "1.1"
 
 def comment_character():
 	return "#"
@@ -98,7 +98,7 @@ def write_file(output_file, output_file_size_in_MB, contents):
 	output_file.unlink(missing_ok=True)
 	output_file_size = output_file_size_in_MB * 1024 * 1024
 
-	sorted(contents, key=lambda x: x.start_pos)
+	contents = sorted(contents, key=lambda x: x.start_pos)
 
 	with open(output_file, "ab") as file:
 		current_file_size = 0
