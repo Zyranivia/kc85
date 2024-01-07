@@ -18,7 +18,7 @@ class InputError(Exception):
 		)
 
 def program_version():
-	return "1.1"
+	return "1.2"
 
 def comment_character():
 	return "#"
@@ -58,8 +58,8 @@ def get_file_contents(input_file_list):
 	try:
 		output_file_splits = files[0].split()
 		assert(len(output_file_splits) == 2)
-		output_file_size_in_MB = int(output_file_splits[0])
-		assert(output_file_size_in_MB in [1, 2, 4, 8])
+		output_file_size_in_MB = float(output_file_splits[0].replace(',', '.'))
+		assert(output_file_size_in_MB in [0.5, 1, 2, 4, 8])
 		output_file = Path(output_file_splits[1])
 
 	except Exception as e:
@@ -96,7 +96,7 @@ def get_file_contents(input_file_list):
 
 def write_file(output_file, output_file_size_in_MB, contents):
 	output_file.unlink(missing_ok=True)
-	output_file_size = output_file_size_in_MB * 1024 * 1024
+	output_file_size = int(output_file_size_in_MB * 1024 * 1024)
 
 	contents = sorted(contents, key=lambda x: x.start_pos)
 
