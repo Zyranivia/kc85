@@ -18,7 +18,7 @@ class InputError(Exception):
 		)
 
 def program_version():
-	return "1.2"
+	return "1.3"
 
 def comment_character():
 	return "#"
@@ -58,8 +58,8 @@ def get_file_contents(input_file_list):
 	try:
 		output_file_splits = files[0].split()
 		assert(len(output_file_splits) == 2)
-		output_file_size_in_MB = float(output_file_splits[0].replace(',', '.'))
-		assert(output_file_size_in_MB in [0.5, 1, 2, 4, 8])
+		output_file_size_in_kB = float(output_file_splits[0].replace(',', '.'))
+		assert(output_file_size_in_kB in [512, 1024, 2048, 4096, 8192])
 		output_file = Path(output_file_splits[1])
 
 	except Exception as e:
@@ -92,11 +92,11 @@ def get_file_contents(input_file_list):
 		with open(filepath, "rb") as file: # read bytes
 			contents.append(FileContent(filepath.name, file.read(), starting_pos))
 	
-	return output_file, output_file_size_in_MB, contents
+	return output_file, output_file_size_in_kB, contents
 
-def write_file(output_file, output_file_size_in_MB, contents):
+def write_file(output_file, output_file_size_in_kB, contents):
 	output_file.unlink(missing_ok=True)
-	output_file_size = int(output_file_size_in_MB * 1024 * 1024)
+	output_file_size = int(output_file_size_in_kB * 1024)
 
 	contents = sorted(contents, key=lambda x: x.start_pos)
 
@@ -115,8 +115,8 @@ def write_file(output_file, output_file_size_in_MB, contents):
 		
 		if current_file_size > output_file_size:
 			raise InputError(
-				f"writing all files would result in a bigger file than {output_file_size_in_MB} MiByte",
-				f"Alle Files zu schreiben führt zu einem größeren File als {output_file_size_in_MB} MiByte"
+				f"writing all files would result in a bigger file than {output_file_size_in_kB} kByte",
+				f"Alle Files zu schreiben führt zu einem größeren File als {output_file_size_in_kB} kByte"
 			)
 		file.write(b'\xff' * (output_file_size - current_file_size))
 
@@ -131,8 +131,8 @@ def main():
 		sys.exit()
 
 	try:
-		output_file, output_file_size_in_MB, contents = get_file_contents(Path(sys.argv[1]))
-		write_file(output_file, output_file_size_in_MB, contents)
+		output_file, output_file_size_in_kB, contents = get_file_contents(Path(sys.argv[1]))
+		write_file(output_file, output_file_size_in_kB, contents)
 
 		print(f"'{str(output_file)}' wurde erfolgreich erzeugt")
 		sys.exit(0)

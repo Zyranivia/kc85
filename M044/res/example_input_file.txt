@@ -1,4 +1,4 @@
-0.5 Test.rom
+512 Test.rom
 
 # 00_0000 M047__14_Spiele_KC85.bin
 
